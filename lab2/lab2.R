@@ -1,0 +1,121 @@
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(stringr)
+
+child_mort = read_csv('child_mortality_0_5_year_olds_dying_per_1000_born.csv')
+child_wom = read_csv('children_per_woman_total_fertility.csv')
+pop = read_csv('pop.csv')
+
+dados <- data.frame(
+  pais = pop$country,
+  pop = pop$`1965`,
+  mortalidade = child_mort$`1965`,
+  fertilidade = child_wom$`1965`,
+  taxa_sobrev = 1 - child_mort$`1965`/1000
+)
+
+tem_M <- str_detect(dados$pop, "M") 
+dados$pop[tem_M] <- as.numeric(str_remove(dados$pop[tem_M], "M")) * 10^6
+
+tem_k <- str_detect(dados$pop, "k") 
+dados$pop[tem_k] <- as.numeric(str_remove(dados$pop[tem_k], "k")) * 10^3
+dados$pop <- as.numeric(dados$pop)
+
+dados |>
+  ggplot(aes(x=fertilidade, y=taxa_sobrev * 100, size=pop)) +
+  geom_point() +
+  geom_rect(
+    aes(xmin=5, xmax=8.5, ymin=55, ymax=95),
+    fill=NA,
+    color='black',
+    linewidth = 0.4
+  ) +
+  annotate(
+    "text", x = (5 + 8.5)/2, y = 96, label='EM DESENVOLVIMENTO',
+    color='#888888', family='helvetica', size=4, fontface='bold'
+  ) +
+  annotate(
+    "text", x = (5 + 8.5)/2, y = 54, label='Famílias grandes e muitas mortes infantis',
+    size=3.5, fontface=2,
+  ) +
+  geom_rect(
+    aes(xmin=1.5, xmax=3.3, ymin=90, ymax=100),
+    fill=NA,
+    color='black',
+    linewidth = 0.4
+  ) +
+  annotate(
+    "text", x = (1.5 + 3.3)/2, y = 101, label='DESENVOLVIDOS',
+    color='#888888', family='helvetica', size=4, fontface='bold'
+  ) +
+  annotate(
+    "text", x = (1.5 + 3.3)/2, y = 88, label='Famílias pequenas\n e poucas mortes infantis',
+    size=3.5, fontface=2, hjust=0.5, family='arial' #LMSans10-Bold
+  ) +
+  scale_size_continuous(
+    name = "População",
+    breaks = c(1e6, 5e6, 1e7, 5e7, 1e8),  # Custom break points
+    labels = c("1M", "5M", "10M", "50M", "100M"),  # Clean labels
+    range = c(1, 10)  # Min/max point size
+  ) +
+  theme_light() +
+  labs(
+    x = "Filhos por mulher",
+    y = "Taxa de sobrevivência de crianças até 5 anos",
+    title = "Relação de natalidade e mortalidade em 1965"
+  ) +
+  ylim(50, 101) +
+  xlim(0, 9)
+
+"""
+O primeiro passo para construção do gráfico foi a preparação dos dados para o ano
+de 1965, os dados foram preparados e construido um dataframe com o que era neces-
+sário. Após isso, os dados foram passados para o ggplot e os eixos foram mapeados,
+juntamente do tamanho dos pontos, baseados na população. Então foram construídos 
+os retãngulos e os respectivos textos usando as funções geom_rect e annotate.
+Finalmente, o tema foi editado, junto dos labels e limites dos eixos, além do titulo.
+"""
+
+dados <- data.frame(
+  pais = pop$country,
+  pop = pop$`2017`,
+  mortalidade = child_mort$`2017`,
+  fertilidade = child_wom$`2017`,
+  taxa_sobrev = 1 - child_mort$`2017`/1000
+)
+
+dados <- na.omit(dados)
+
+tem_M <- str_detect(dados$pop, "M") 
+dados$pop[tem_M] <- as.numeric(str_remove(dados$pop[tem_M], "M")) * 10^6
+
+tem_k <- str_detect(dados$pop, "k") 
+dados$pop[tem_k] <- as.numeric(str_remove(dados$pop[tem_k], "k")) * 10^3
+dados$pop <- as.numeric(dados$pop)
+
+dados |>
+  ggplot(aes(x=fertilidade, y=taxa_sobrev * 100, size=pop, alpha=0.7)) +
+  geom_point() +
+  theme_light() +
+  labs(
+    x = "Filhos por mulher",
+    y = "Taxa de sobrevivência de crianças até 5 anos",
+    title = "Relação de natalidade e mortalidade em 2017"
+  ) +
+  scale_size_continuous(
+    name = "População",
+    breaks = c(1e6, 5e6, 1e7, 5e7, 1e8),  # Custom break points
+    labels = c("1M", "5M", "10M", "50M", "100M"),  # Clean labels
+    range = c(1, 10)  # Min/max point size
+  ) +
+  ylim(50, 101) +
+  xlim(0, 9)
+
+"""
+Comparando os gráficos, fica claro a diminuição dos paises com de 3/4 filhos por
+mulher, e consequentemente a diminuição da taxa de mortalidade, já que no gráfico
+de 1965 fica claro o impacto do número de filhos na taxa de mortalidade. Em geral,
+a taxa de sobrevivência aumentou muito, e os países em desenvolvimento melhoraram
+seus indíces.
+"""
