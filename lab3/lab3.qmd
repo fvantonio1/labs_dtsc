@@ -1,0 +1,451 @@
+---
+title: "lab3"
+author: "Antonio Fernandes"
+professor: "Pedro Franklin"
+format: html
+editor: visual
+---
+
+## Parte 1 - Exploração inicial dos dados
+
+Primeiro vamos carregar os dados e realizar uma exploração inicial.
+
+```{r}
+#| warning: false
+library(ggplot2)
+library(dplyr)
+library(readr)
+
+dados <- read.csv('cogumelos_dataset.csv')
+```
+
+Com os dados carregados podemos ver quais os tipos de dados que foram lidos.
+
+```{r}
+summary(dados)
+str(dados)
+```
+
+É percebido que existem apenas váriaveis categórias, logo vamos transforma-lás em fatores e verificar se existem dados faltantes no conjunto.
+
+```{r}
+dados <- dados |>
+  mutate(across(where(is.character), as.factor))
+
+sum(is.na(dados))
+```
+
+Concluimos que não existem dados faltantes.
+
+Agora podemos fazer alguns gráfico para analisarmos as váriaveis e sua relação com as classes. Nesse caso, temos duas classes: Comestível e venenoso.
+
+Foi criada uma função para facilitar os plots, na qual é gerado um gráfico de barras para uma váriavel e preenchido conforme as classes.
+
+```{r}
+plot_count <- function(data, x_var){
+  p <- ggplot(data, aes(x={{x_var}}, fill=classe)) 
+  p <- p + geom_bar()
+  
+  return(p)
+}
+```
+
+Com isso foram gerados os gráficos para todas variavéis. Algumas características em que ficou claro o impacto nas classes foram:
+
+#### Anel do Caule
+
+Fica claro que a proporção de venenosos com anel presente é bem maior que sem o anel.
+
+```{r}
+plot_count(dados, anel_caule)
+```
+
+#### Textura da Superfície
+
+Novamente, olhando para o gráfico, conseguimos perceber claramente que texturas viscosas tendem a representar cogumelos venenosos.
+
+```{r}
+plot_count(dados, textura_superficie)
+```
+
+#### Cor do Chapéu
+
+A cor do chapéu dos cogumelos pareceu um ótimo indicativo também, onde, cogumelos amarelos, brancos e vermelhos tendem a ser venenosos.
+
+```{r}
+plot_count(dados, cor_chapeu)
+```
+
+A maioria das variáveis, com exeção da sazonalidade, pareceram ser bons indicativos para classificar os cogumelos.
+
+#### Sazonalidade
+
+```{r}
+plot_count(dados, sazonalidade)
+```
+
+## Parte 2 - Construção da Árvore de Decisão Manual
+
+Para a separação inicial foi utilizado a cor do chapéu do cogumelo. Após essa separação e as subsequentes, foram analisadas as váriaveis que mais forneciam informações sobre o conjunto de dados já filtrado. Para isso foram construídos gráficos de barras similares aos da exploração inicial, porém realizando o filtro dos dados relativos ao galho em questão.
+
+```{r}
+plot_count(dados |>
+  filter(cor_chapeu %in% c('amarelo', 'branco', 'vermelho')) |>
+  filter(anel_caule == 'presente') |>
+  filter(tipo_lamelas %in% c('adnatas', 'decorrentes')), textura_superficie) +
+  labs(title='Para chapeus amarelos, brancos e vermelhos')
+```
+
+Por exemplo, nesse caso, já tinha sido criado os nó para a a cor do chapéu, anel do caule e tipo de lamelas, após isso para a criação do próximo nó foi percebido que a textura da superfície oferecia uma boa separação, pois possuia uma classe apenas com cogumelos venenosos.
+
+```{r}
+#| echo: false
+arvore <- function(data) {
+  n <- nrow(data)
+  predictions <- logical(n)
+  
+  for (i in 1:n) {
+    row <- data[i, ]
+    
+    cor_chapeu <- as.character(row$cor_chapeu)
+    anel_caule <- as.character(row$anel_caule)
+    tipo_lamelas <- as.character(row$tipo_lamelas)
+    textura_superficie <- as.character(row$textura_superficie)
+    cor_lamelas <- as.character(row$cor_lamelas)
+    base_caule <- as.character(row$base_caule)
+    habitat <- as.character(row$habitat)
+    forma_chapeu <- as.character(row$forma_chapeu)
+    sazonalidade <- as.character(row$sazonalidade)
+    
+    if (cor_chapeu %in% c('amarelo', 'branco', 'vermelho')) {
+      if (anel_caule == 'presente') {
+        if (tipo_lamelas == 'livres') {
+          predictions[i] <- FALSE # venenoso
+        } 
+        else { # tipo_lamelas == ('adnatas', 'decorrentes')
+          if (textura_superficie == 'viscosa') {
+            predictions[i] <- FALSE # venenoso
+          } 
+          else { # textura_superficie == {'escamosa', 'lisa'}
+            if (cor_lamelas == 'rosa') {
+              predictions[i] <- FALSE
+            }
+            else if (cor_lamelas == 'creme') {
+              predictions[i] <- TRUE
+            }
+            else { # cor_lamelas == ('branca', 'marrom')
+              if (base_caule %in% c('bulbosa', 'com_volva')) {
+                predictions[i] <- FALSE
+              }
+              else { # base_caule == 'normal'
+                if (habitat == 'tronco_morto') {
+                  predictions[i] <- TRUE
+                }
+                else { # habitat == ('solo', 'madeira')
+                  if (forma_chapeu == 'conico') {
+                    predictions[i] <- FALSE
+                  }
+                  else {
+                    predictions[i] <- TRUE
+                  }
+                }
+              }
+            }
+          }
+        }
+      } 
+      else { # anel_caule == 'ausente'
+        if (habitat == 'solo') {
+          if (tipo_lamelas == 'decorrentes') {
+            predictions[i] <- FALSE
+          }
+          else { # tipo_lamelas == ('adnatas', 'livres')
+            if (base_caule == 'bulbosa') {
+              predictions[i] <- FALSE
+            }
+            else { # base_caule == ('com_volva', 'normal')
+              if (cor_lamelas %in% c('creme', 'rosa')) {
+                predictions[i] <- FALSE
+              }
+              else { # cor_lamelas
+                if (forma_chapeu %in% c('campanulado', 'conico')) {
+                  predictions[i] <- FALSE
+                }
+                else if (forma_chapeu == 'convexo') {
+                  predictions[i] <- TRUE
+                }
+                else { # forma_chapeu == plano
+                  if (sazonalidade == 'inverno') {
+                    predictions[i] <- TRUE
+                  }
+                  else if (sazonalidade == 'outono') {
+                    predictions[i] <- FALSE
+                  }
+                  else { # sazonalidade == 'primavera'
+                    if (textura_superficie == 'lisa')
+                      predictions[i] <- TRUE
+                    else {
+                      predictions[i] <- FALSE
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        else { # habitat == ('madeira', 'tronco_morto')
+          if (base_caule == 'com_volva') {
+            if (textura_superficie == 'escamosa') {
+              if (forma_chapeu == 'conico') {
+                predictions[i] <- FALSE
+              }
+              else { # forma_chapeu == campanulado
+                if (sazonalidade == 'verao') {
+                  predictions[i] <- FALSE
+                }
+                else {
+                  predictions[i] <- TRUE
+                }
+              }
+            }
+            else {
+              predictions[i] <- FALSE
+            }
+          }
+          else { # base_caule == ('bulbosa', 'normal')
+            if (forma_chapeu %in% c('convexo', 'plano')) {
+              predictions[i] <- TRUE
+            }
+            else { # forma_chapeu == ('conico', 'campanulado')
+              if (cor_lamelas == 'creme') {
+                if (tipo_lamelas == 'decorrentes') {
+                  predictions[i] <- TRUE
+                }
+                else {
+                  predictions[i] <- FALSE
+                }
+              }
+              else {
+                predictions[i] <- FALSE
+              }
+            }
+          }
+        }
+      }
+    } 
+    else { # cor == ('marrom', 'cinza', 'bege')
+      if (anel_caule == 'ausente') {
+        if (tipo_lamelas == 'decorrentes') {
+          predictions[i] <- TRUE
+        }
+        else { 
+          if (textura_superficie == 'lisa') {
+            if (sazonalidade == 'outono') {
+              if (cor_lamelas == 'branca') {
+                if (base_caule == 'normal') {
+                  predictions[i] <- TRUE
+                }
+                else {
+                  predictions[i] <- FALSE
+                }
+              }
+              else { # cor_lamelas != branca
+                predictions[i] <- TRUE
+              }
+            }
+            else { # sazonalidade != 'outono'
+              predictions[i] <- TRUE
+            }
+            
+          }
+          else { # textura_superficie == ('escamosa', 'viscosa')
+            if (forma_chapeu == 'conico') {
+              predictions[i] <- FALSE
+            }
+            else {
+              if (cor_lamelas == 'marrom') {
+                predictions[i] <- TRUE
+              } 
+              else { # cor_lamelas != marrom
+                if (habitat == 'tronco_morto') {
+                  predictions[i] <- TRUE
+                }
+                else {
+                  if (base_caule == 'normal') {
+                    predictions[i] <- TRUE
+                  }
+                  else {
+                    if (sazonalidade == 'outono') {
+                      predictions[i] <- TRUE
+                    }
+                    else {
+                      predictions[i] <- FALSE
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      else { # anel_caule == 'presente'
+        if (forma_chapeu %in% c('plano', 'convexo')) {
+          if (sazonalidade == 'verao') {
+            predictions[i] <- TRUE
+          }
+          else {
+            if (cor_lamelas == 'marrom') {
+              predictions[i] <- TRUE
+            }
+            else {
+              if (base_caule == 'normal') {
+                predictions[i] <- TRUE
+              }
+              else {
+                if (sazonalidade == 'primavera') {
+                  predictions[i] <- FALSE
+                }
+                else {
+                  if (textura_superficie == 'viscosa') {
+                    predictions[i] <- FALSE
+                  }
+                  else {
+                    if (habitat == 'madeira') {
+                      predictions[i] <- TRUE
+                    }
+                    else {
+                      if (tipo_lamelas == 'adnatas') {
+                        predictions[i] <- TRUE
+                      }
+                      else {
+                        predictions[i] <- FALSE
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        else { # forma_chapeu == (campanulado, conico)
+          if (tipo_lamelas == 'livres') {
+            if (textura_superficie == 'lisa') {
+              if (base_caule == 'bulbosa') {
+                predictions[i] <- FALSE
+              }
+              else {
+                predictions[i] <- TRUE
+              }
+            }
+            else {
+              predictions[i] <- FALSE
+            }
+          }
+          else { # tipo_lamelas == 'decorrentes', 'adnatas'
+            if (base_caule == 'bulbosa') {
+              predictions[i] <- FALSE
+            }
+            else {
+              if (sazonalidade == 'inverno') {
+                predictions[i] <- TRUE
+              }
+              else {
+                if (habitat == 'solo') {
+                  if (textura_superficie == 'viscosa') {
+                    predictions[i] <- FALSE
+                  }
+                  else if (textura_superficie == 'lisa') {
+                    predictions[i] <- TRUE
+                  }
+                  else { # textura_superficie == 'escamosa'
+                    predictions[i] <- FALSE
+                  }
+                }
+                else { # habitat != 'solo'
+                  if (cor_lamelas == 'branca') {
+                    if (textura_superficie == 'escamosa') {
+                      predictions[i] <- TRUE
+                    }
+                    else  {
+                      predictions[i] <- FALSE
+                    }
+                  }
+                  else {
+                    predictions[i] <- TRUE
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return(predictions)
+}
+```
+
+Dessa forma, a árvore foi criada. Por conta da função ter ficado muito grande ela não estará aqui, porém ela pode ser encontrada no código fonte `lab3.r`.
+
+## Parte 3 - Avaliação do Modelo
+
+Vamos aplicar a árvore de decisão criada nos dados e comparar com as classes reais. Para essa avaliação vamos considerar uma classificação binária, onde comestível é verdadeiro e venenoso é falso.
+
+```{r}
+y <- dados$classe == 'comestivel'
+# previsao dos dados
+yhat <- arvore(dados)
+
+# acuracia
+acuracia <- sum(y == yhat) / length(y)
+acuracia
+```
+
+Podemos ver que o modelo chegou a uma acurácia de 95.6%, o que pode ser considerado um resultado satisfatório.
+
+Também foi construída a matrix de confusão, para melhor análise e encontrar possíveis problemas do modelo.
+
+```{r}
+conf_matrix <- table(Actual=y, Predicted=yhat)
+conf_matrix
+```
+
+Com a matrix de confusão, podemos extrair os falsos negativos, falsos positivos, verdadeiros negativos e verdadeiros positivos. Após isso, podemos calcular a precisão e o recall.
+
+$$
+precisao = TP / (TP + FP) 
+$$
+
+$$
+recall = TP / (TP + FN)
+$$
+
+```{r}
+TN <- conf_matrix['FALSE', 'FALSE']
+TP <- conf_matrix['TRUE', 'TRUE']
+FN <- conf_matrix['TRUE', 'FALSE']
+FP <- conf_matrix['FALSE', 'TRUE']
+
+precisao <- TP / (TP + FP)
+recall <- TP / (TP + FN)
+```
+
+A precisão indica qual é a probabilidade do modelo estar certo, dado que ele classificou a observação como positiva. O recall mede o quanto o modelo erra em deixar de classificar observações como positivo.
+
+#### Análise dos Erros
+
+Para isso, vamos pegar as observações que o modelo errou e procurar identificar padrões nos erros.
+
+```{r}
+erros_idx <- y != yhat
+erros <- dados[erros_idx, ]
+erros
+```
+
+Olhando para os erros dessa forma é um pouco difícil identificar possíveis melhorias, mas uma coisa que é possível ver é que cores de lamelas branca e creme foram as que mais tiveram erros.
+
+## Parte 4 - Reflexão e Comparação
+
+Para a construção da árvore foi utilizado uma análise visual das variáveis por suas classes. Com essa análise, foi escolhida a váriavel que apresentava melhor divisão das classes e mais informação sobre. Esse processo foi feito sucessivamente até todas as observações terem sido separadas ou os atributos já terem sido todos utilizados.
+
+Essa abordagem manual possui algumas limitações. Primeiro, para fazer a escolha da variável foi utilizada uma abordagem gráfica, onde poderiam ser utilizados critérios para escolher a variável que possui mais informação. Além disso, é um processo muito moroso, que podia ser facilitado pela velocidade da computação.
